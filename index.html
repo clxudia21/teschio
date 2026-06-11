@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teschio Animato</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:#000;overflow:hidden}
+#bg-layer{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  z-index:0;pointer-events:none;
+  opacity:0;transition:opacity .6s
+}
+#bg-layer.active{opacity:1}
+#bg-layer .ch{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  background-size:cover;background-position:center;
+  mix-blend-mode:screen
+}
+#ascii-canvas{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  z-index:1;display:block
+}
+#controls{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:10px;
+  background:rgba(20,20,20,.9);padding:10px 18px;border-radius:8px;
+  border:1px solid #333;z-index:20;
+  flex-wrap:wrap;justify-content:center;max-width:96vw
+}
+#controls label{color:#888;font-size:11px;font-family:'Courier New',monospace;white-space:nowrap}
+#controls select{
+  background:#1a1a1a;color:#aaa;border:1px solid #444;border-radius:4px;
+  padding:4px 8px;font-size:11px;font-family:'Courier New',monospace;cursor:pointer;outline:none
+}
+#controls select:hover{border-color:#777}
+#controls input[type=range]{
+  width:100px;height:4px;-webkit-appearance:none;appearance:none;
+  background:#333;border-radius:2px;outline:none;cursor:pointer
+}
+#controls input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+  background:#888;border:none;cursor:pointer
+}
+#controls .val{color:#aaa;font-size:11px;min-width:20px;text-align:center;font-family:'Courier New',monospace}
+#controls input[type=file]{display:none}
+#controls .btn{
+  color:#aaa;font-size:11px;font-family:'Courier New',monospace;
+  padding:4px 10px;border:1px solid #555;border-radius:4px;
+  cursor:pointer;background:transparent;transition:.2s;white-space:nowrap
+}
+#controls .btn:hover{border-color:#999;color:#eee}
+#controls .btn.on{border-color:#c66;color:#e88;background:rgba(200,50,50,.15)}
+.sep{color:#333;font-size:12px;user-select:none}
+</style>
+</head>
+<body>
+<div id="bg-layer"></div>
+<canvas id="ascii-canvas"></canvas>
+<div id="controls">
+  <label>velocità</label>
+  <input type="range" id="speedSlider" min="1" max="20" value="8" step="1">
+  <span class="val" id="speedVal">8</span>
+  <span class="sep">|</span>
+  <label>glitch</label>
+  <select id="glitchMode">
+    <option value="none">nessuno</option>
+    <option value="datamosh">datamosh</option>
+    <option value="rgb">rgb</option>
+    <option value="fluid">fluidification</option>
+  </select>
+  <span class="sep">|</span>
+  <label>intensità</label>
+  <input type="range" id="intensitySlider" min="1" max="10" value="3" step="1">
+  <span class="val" id="intensityVal">3</span>
+  <span class="sep">|</span>
+  <label>mouse</label>
+  <input type="range" id="mouseSlider" min="0" max="10" value="5" step="1">
+  <span class="val" id="mouseVal">5</span>
+  <span class="sep">|</span>
+  <button class="btn" id="fileBtn">+ immagine</button>
+  <input type="file" id="fileInput" accept="image/*">
+  <button class="btn" id="bgBtn">+ bg rgb</button>
+  <input type="file" id="bgInput" accept="image/*">
+</div>
+<script>
+var defaultRaw = [
+"                                 .....++++++++.........",
+"                           .....++++###############++##++++..",
+"                        ...++########@@@@@@@@@@@@@####@@#####++.",
+"                      .++###@@@###@@@@@@@@@@@@@@@@@##@@@@#####++..",
+"                   ..+##@@@@@@@###@@@@@@@@@@@@@@@@@##@@@#++++++++...",
+"                 .++##@@@@@@@########@@@@@@@@@@@@@@@@@@##+............",
+"              .+###@@@@@@@@#+++...++##@@@@@@@@@@@@@@@@#+...   ...........",
+"            .+##@@@@@@@@@#++..    ..++##@@@@@@@@@@@@@@#+........  .........",
+"          .+##@@@@@##@@@#+.         ..+##@@@@@@@######+.   ......    ...+++..",
+"         .+#@@@@@@@##@@#+            ..+####@@@@####+.     ..++++..   ...++++..",
+"       +#@@@@@@@@@@@@+.              .++++##@@##++.       ..+++++.....+++#++++..",
+"      .#@@@@@@@@@@@@@+.              ..+++##@@##+.         ..+####++++#########++.",
+"    .+@@@@@@@@@@@@@@#.           ....+++##@@@#++.          ..+#######@@@@@@@@@@#+..",
+"    +#@@@@@@@@@@@@@@@+.....++++++++#####@@@@@##+.           .++#####@@@@@@@@@@@@@#+.",
+"  .#@@@@@@@@@@@@@@@@@##############@@@@@@@@@@##+.         .++#####@@@@@@@@@@@@@@@##+.",
+"  .#@@@@@@@@@#@@@@@@@@@@@@@@@###@@@@@@@@@@@@@@@#+..    ..+########@@@@@@@@#@@@@@@@##+.",
+" +@@@@@@@@@@#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#++++++##@@@@@@@@@@@@@@@###@@@##@@@#+.",
+" .#@@@@@@@@@@#@@###@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@#####@@@@@@@@@@@@@@@@########+##@@#+.",
+" .#@@@@@@@@##@@@###@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@############+.++#@@#+.",
+" +#@@@@@@@##@@@@@@@@@@@@@@@######@@@@@@@@@@@@@@@@@@@@@@@@@@######+++++++++++++.++###+.",
+"  +#@@@@@@##@@@@@@@@@@@@####++++++##@@@@@@@@@@@@@@@##@@######++............++++.++#+..",
+"   +#@@@@@###@@@@@@######+++++....++##@@@@@@@@@@@@####@##++++..         .....++++++..",
+"    .+##@@@###@@@@#######++....++...++##@@@@@@@@@@@######+..                ..+++++.",
+"    .+###@#####@##++++++#+++..+++++++++###@@@@####@@####+.                 ..+++++.",
+"     .+#@@#######+++++++++++...+++++..+++#############+.                   ..++++.",
+"      .+#@@###+#+++++++++++.... ..........++#########+..                    ..++..",
+"       .+#@###+#+####++......             .+#######++.                      .....",
+"       .############+++.....             ..+###++..                         ....",
+"       .+################++.             ..++...                           .++..",
+"        .++###@##+++####@##.               ..                              .+++.",
+"        ..+##@##+++###@@@#.                                                .+#+.",
+"       .##@##+++++##@#+.                                                .+##++++.",
+"       .+####++..+##@#+                                                  +######+",
+"       .++#+++...+###+.                                                 .+#@@@#+",
+"        .+++.....+##+..                                                .+#@@@#.",
+"         ....  ..+###++....                                           .+####+.",
+"             .+#######++..                                        ..+###+.",
+"              .+#@@@@@@##+.                                     ..++++#+.",
+"              .+#@@@@@@@##+.                                   ..++##+++.",
+"               .+#@@@@@@@##.                                    ..+###++.",
+"               .+#@@@@@@@#+.   .......                          ..+##++.",
+"               .+@@@@@@@@#++.+++++++++..                        .++##++.",
+"                .#@@@@@###############++..                      .++##++.",
+"                +#@@@####@@@@@@########++...           ........++#####+.",
+"                .++###++##@@@@@@##########+++++......+++++##++++######+.",
+"                 .+++++++#@@@@@@@##@@@############++#################+.",
+"                  ......+#@@@@@@@@@@@@@@@##@@######@@@##@####@@####+.",
+"                      .+#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@##+.",
+"                       ..+##@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@##+..",
+"                         ..++#####@@@@@@@@##@@@@@@@@@@@@@@##++.",
+"                           ....+++##@@@@####@@@@@@@@@@@##+..",
+"                               ...++################+++.."
+];
+
+var charSets = ['@%#*+=-:. ','#%@*+=-:. ','*#%@+=-:. ','+*#%@=-:. ','=+*#%@-:. ','-=+*#%@:. ',':-=+*#%@. ','.:-=+*#%@ '];
+
+var canvas = document.getElementById('ascii-canvas');
+var ctx = canvas.getContext('2d');
+var speedSlider = document.getElementById('speedSlider');
+var speedVal = document.getElementById('speedVal');
+var glitchMode = document.getElementById('glitchMode');
+var intensitySlider = document.getElementById('intensitySlider');
+var intensityVal = document.getElementById('intensityVal');
+var mouseSlider = document.getElementById('mouseSlider');
+var mouseVal = document.getElementById('mouseVal');
+var fileBtn = document.getElementById('fileBtn');
+var fileInput = document.getElementById('fileInput');
+var bgBtn = document.getElementById('bgBtn');
+var bgInput = document.getElementById('bgInput');
+var bgLayer = document.getElementById('bg-layer');
+
+var grid = [];
+var baseGrid = [];
+var rows = 0, cols = 0;
+var frame = 0;
+var animId = null;
+var lastFrameTime = 0;
+var animInterval = 200;
+var mouseX = -9999, mouseY = -9999;
+var charW = 0, charH = 0, fontSize = 16, dpr = 1;
+
+function setGlyphs(rawLines) {
+  baseGrid = [];
+  rows = rawLines.length;
+  cols = 0;
+  for (var y = 0; y < rows; y++)
+    if (rawLines[y].length > cols) cols = rawLines[y].length;
+  for (var y = 0; y < rows; y++) {
+    var row = [];
+    for (var x = 0; x < cols; x++)
+      row.push(x < rawLines[y].length ? rawLines[y][x] : ' ');
+    baseGrid.push(row);
+  }
+  restoreChars();
+  resizeCanvas();
+}
+
+function resizeCanvas() {
+  dpr = window.devicePixelRatio || 1;
+  var w = window.innerWidth;
+  var h = window.innerHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!rows || !cols) return;
+  fontSize = Math.min(w / (cols * 0.6), h / rows) * 0.65;
+  ctx.font = fontSize + 'px "Courier New","Lucida Console",monospace';
+  charW = ctx.measureText('@').width;
+  charH = fontSize;
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+  ctx.font = fontSize + 'px "Courier New","Lucida Console",monospace';
+  ctx.textBaseline = 'top';
+  var totalW = cols * charW;
+  var totalH = rows * charH;
+  var startX = (canvas.width / dpr - totalW) / 2;
+  var startY = (canvas.height / dpr - totalH) / 2;
+  var mode = glitchMode.value;
+  var intensity = parseInt(intensitySlider.value);
+  var mStr = parseInt(mouseSlider.value);
+  var mouseStrength = mStr / 5;
+  var activeMouse = mouseX > -9998 && mStr > 0;
+  var activeRGB = mode === 'rgb';
+  for (var y = 0; y < rows; y++) {
+    for (var x = 0; x < cols; x++) {
+      var ch = grid[y][x];
+      if (ch === ' ') continue;
+      var px = startX + x * charW;
+      var py = startY + y * charH;
+      if (activeMouse) {
+        var dx = mouseX - (px + charW / 2);
+        var dy = mouseY - (py + charH / 2);
+        var dist = dx * dx + dy * dy;
+        if (dist < 90000 && dist >= 1) {
+          dist = Math.sqrt(dist);
+          var force = (1 - dist / 300) * 12 * mouseStrength;
+          if (force > 0.5) {
+            var angle = Math.atan2(dy, dx);
+            px += Math.cos(angle) * force;
+            py += Math.sin(angle) * force;
+          }
+        }
+      }
+      if (activeRGB) {
+        var rOff = Math.sin(x * 0.3 + y * 0.2 + frame * 0.08) * intensity * 1.5;
+        var bOff = Math.sin(x * 0.2 + y * 0.25 + frame * 0.07) * intensity * 1.8;
+        if (rOff > 0.5 || rOff < -0.5) {
+          ctx.fillStyle = 'rgba(255,0,0,0.65)';
+          ctx.fillText(ch, px - rOff, py);
+        }
+        if (bOff > 0.5 || bOff < -0.5) {
+          ctx.fillStyle = 'rgba(0,0,255,0.55)';
+          ctx.fillText(ch, px + bOff, py);
+        }
+        ctx.fillStyle = 'rgba(255,255,255,1)';
+        ctx.fillText(ch, px, py);
+      } else {
+        ctx.fillStyle = '#ddd';
+        ctx.fillText(ch, px, py);
+      }
+    }
+  }
+}
+
+function updateChars() {
+  var mode = glitchMode.value;
+  var intensity = parseInt(intensitySlider.value) / 10;
+  var maxC = charSets[0].length - 1;
+  for (var y = 0; y < rows; y++) {
+    for (var x = 0; x < cols; x++) {
+      var baseCh = baseGrid[y][x];
+      if (baseCh === ' ') continue;
+      if (mode === 'fluid') {
+        var wave = Math.sin(x * 0.15 + y * 0.1 + frame * 0.05) * intensity * 3;
+        var setIdx = Math.floor((x + y + frame + wave) % charSets.length);
+        if (setIdx < 0) setIdx += charSets.length;
+        var ci = charSets[setIdx].indexOf(baseCh);
+        if (ci === -1 || ci >= maxC) ci = (x + y + frame) % maxC;
+        var shift = Math.floor(frame / 3) % maxC;
+        grid[y][x] = charSets[setIdx][(ci + shift) % maxC];
+      } else {
+        var setIdx = Math.floor((x + y + frame) % charSets.length);
+        var ci = charSets[setIdx].indexOf(baseCh);
+        if (ci === -1 || ci >= maxC) ci = (x + y + frame) % maxC;
+        var shift = Math.floor(frame / 3) % maxC;
+        grid[y][x] = charSets[setIdx][(ci + shift) % maxC];
+      }
+    }
+  }
+}
+
+function doDatamosh() {
+  var intensity = parseInt(intensitySlider.value);
+  var count = Math.floor(intensity * 2);
+  for (var n = 0; n < count; n++) {
+    var bw = 3 + Math.floor(Math.random() * 6);
+    var bh = 2 + Math.floor(Math.random() * 4);
+    if (bw >= cols || bh >= rows) continue;
+    var sx = Math.floor(Math.random() * (cols - bw));
+    var sy = Math.floor(Math.random() * (rows - bh));
+    var dir = Math.random() > 0.5 ? 1 : -1;
+    var dx = sx + bw * dir;
+    if (dx < 0 || dx + bw >= cols) continue;
+    for (var y = 0; y < bh && sy + y < rows; y++) {
+      for (var x = 0; x < bw && sx + x < cols && dx + x < cols; x++) {
+        if (baseGrid[sy + y][sx + x] === ' ' || baseGrid[sy + y][dx + x] === ' ') continue;
+        var tmp = grid[sy + y][sx + x];
+        grid[sy + y][sx + x] = grid[sy + y][dx + x];
+        grid[sy + y][dx + x] = tmp;
+      }
+    }
+  }
+}
+
+function restoreChars() {
+  grid = [];
+  for (var y = 0; y < rows; y++) {
+    grid.push(baseGrid[y].slice());
+  }
+}
+
+function loop(timestamp) {
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  var elapsed = timestamp - lastFrameTime;
+  if (elapsed >= animInterval) {
+    lastFrameTime = timestamp;
+    frame++;
+    updateChars();
+    if (glitchMode.value === 'datamosh') doDatamosh();
+  }
+  render();
+  animId = requestAnimationFrame(loop);
+}
+
+speedSlider.addEventListener('input', function() {
+  speedVal.textContent = speedSlider.value;
+  animInterval = Math.max(40, 300 - parseInt(speedSlider.value) * 13);
+});
+
+glitchMode.addEventListener('change', function() {
+  restoreChars();
+});
+
+intensitySlider.addEventListener('input', function() {
+  intensityVal.textContent = intensitySlider.value;
+});
+
+mouseSlider.addEventListener('input', function() {
+  mouseVal.textContent = mouseSlider.value;
+});
+
+window.addEventListener('resize', resizeCanvas);
+
+// mouse
+canvas.addEventListener('mousemove', function(e) {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+canvas.addEventListener('mouseleave', function() {
+  mouseX = -9999; mouseY = -9999;
+});
+
+// touch for mobile
+canvas.addEventListener('touchmove', function(e) {
+  var t = e.touches[0];
+  mouseX = t.clientX;
+  mouseY = t.clientY;
+}, {passive:true});
+
+canvas.addEventListener('touchend', function() {
+  mouseX = -9999; mouseY = -9999;
+});
+
+// image loader
+fileBtn.addEventListener('click', function() { fileInput.click(); });
+fileInput.addEventListener('change', function(e) {
+  if (!e.target.files || !e.target.files[0]) return;
+  loadImageFile(e.target.files[0], function(lines) { setGlyphs(lines); });
+});
+
+function loadImageFile(file, cb) {
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var img = new Image();
+    img.onload = function() {
+      canvas.style.opacity = '0.3';
+      setTimeout(function() {
+        var lines = imgToAscii(img);
+        canvas.style.opacity = '1';
+        cb(lines);
+      }, 100);
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function imgToAscii(img) {
+  var maxCols = 110;
+  var c = document.createElement('canvas');
+  var cctx = c.getContext('2d');
+  var w = maxCols;
+  var h = Math.floor(w * (img.height / img.width) * 0.45);
+  if (h < 1) h = 1;
+  c.width = w; c.height = h;
+  cctx.drawImage(img, 0, 0, w, h);
+  var d = cctx.getImageData(0,0,w,h).data;
+  var minG = 255, maxG = 0, grays = [];
+  for (var i = 0; i < d.length; i += 4) {
+    var g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    grays.push(g);
+    if (g < minG) minG = g;
+    if (g > maxG) maxG = g;
+  }
+  var range = maxG - minG || 1;
+  var lines = [];
+  for (var y = 0; y < h; y++) {
+    var line = '';
+    for (var x = 0; x < w; x++) {
+      var val = Math.pow((grays[y * w + x] - minG) / range, 2);
+      if (val > 0.65) line += '@';
+      else if (val > 0.40) line += '#';
+      else if (val > 0.22) line += '+';
+      else if (val > 0.08) line += '.';
+      else line += ' ';
+    }
+    line = line.replace(/^ +/, '').replace(/ +$/, '');
+    if (line.length) lines.push(line);
+  }
+  while (lines.length && lines[0].replace(/[ .]/g, '').length < 3) lines.shift();
+  while (lines.length && lines[lines.length - 1].replace(/[ .]/g, '').length < 3) lines.pop();
+  var mw = 0;
+  for (var i = 0; i < lines.length; i++) if (lines[i].length > mw) mw = lines[i].length;
+  for (var i = 0; i < lines.length; i++) lines[i] = ' '.repeat(Math.floor((mw - lines[i].length) / 2)) + lines[i];
+  return lines;
+}
+
+// background RGB
+bgBtn.addEventListener('click', function() {
+  if (bgLayer.classList.contains('active')) {
+    removeBg();
+    return;
+  }
+  bgInput.click();
+});
+
+function removeBg() {
+  bgLayer.classList.remove('active');
+  bgLayer.innerHTML = '';
+  bgBtn.textContent = '+ bg rgb';
+  bgBtn.classList.remove('on');
+}
+
+function bgFromImage(img) {
+  var c = document.createElement('canvas');
+  c.width = 300; c.height = Math.floor(300 * (img.height / img.width));
+  var cctx = c.getContext('2d');
+  cctx.drawImage(img, 0, 0, c.width, c.height);
+  var d = cctx.getImageData(0,0,c.width,c.height).data;
+  function makeChannel(rMul, gMul, bMul) {
+    var cc = document.createElement('canvas');
+    cc.width = c.width; cc.height = c.height;
+    var cctx2 = cc.getContext('2d');
+    var id = cctx2.createImageData(c.width, c.height);
+    for (var i = 0; i < d.length; i += 4) {
+      id.data[i] = d[i] * rMul;
+      id.data[i+1] = d[i+1] * gMul;
+      id.data[i+2] = d[i+2] * bMul;
+      id.data[i+3] = 255;
+    }
+    cctx2.putImageData(id, 0, 0);
+    return cc.toDataURL();
+  }
+  var rUrl = makeChannel(1,0,0);
+  var gUrl = makeChannel(0,1,0);
+  var bUrl = makeChannel(0,0,1);
+  bgLayer.innerHTML = '<div class="ch" style="background-image:url('+rUrl+')"></div><div class="ch" style="background-image:url('+gUrl+')"></div><div class="ch" style="background-image:url('+bUrl+')"></div>';
+  bgLayer.classList.add('active');
+  bgBtn.textContent = '× chiudi bg';
+  bgBtn.classList.add('on');
+  var off = 0;
+  var els = bgLayer.querySelectorAll('.ch');
+  function bgAnim() {
+    off = (off + 0.25) % 40;
+    els[0].style.transform = 'translate(' + (4 + Math.sin(off * 0.15) * 6) + 'px,0)';
+    els[1].style.transform = 'translate(0,' + (Math.sin(off * 0.08) * 3) + 'px)';
+    els[2].style.transform = 'translate(' + (-(4 + Math.cos(off * 0.12) * 6)) + 'px,0)';
+    requestAnimationFrame(bgAnim);
+  }
+  bgAnim();
+}
+
+bgInput.addEventListener('change', function(e) {
+  if (!e.target.files || !e.target.files[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var img = new Image();
+    img.onload = function() { bgFromImage(img); };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(e.target.files[0]);
+});
+
+// init
+setGlyphs(defaultRaw);
+animId = requestAnimationFrame(loop);
+</script>
+</body>
+</html>
